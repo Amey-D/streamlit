@@ -309,6 +309,38 @@ _create_option(
 )
 
 _create_option(
+    "client.enableExternalCache",
+    description="Whether to enable external caching behavior in st.cache.",
+    default_val=False,
+    type_=bool,
+    scriptable=False,
+)
+
+
+@_create_option("client.externalCacheKeyPrefix", type_=str, scriptable=False)
+@util.memoize
+def _external_cache_key_prefix():
+    """The key prefix to use when external cache is enabled.
+
+    This should be set to the same value across all replicas to make sure
+    the replicas can share the cache.
+
+    This is relevant only when client.enableExternalCache is enabled.
+
+    Default: randomly generated string.
+    """
+    return secrets.token_hex(nbytes=8)
+
+
+_create_option(
+    "client.externalCacheRedisURL",
+    description="Connection string to Redis backend as the external cache store.",
+    default_val="redis://localhost:6379/",
+    type_=str,
+    scriptable=False,
+)
+
+_create_option(
     "client.displayEnabled",
     description="""If false, makes your Streamlit script not draw to a
         Streamlit app.""",

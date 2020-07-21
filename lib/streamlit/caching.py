@@ -31,6 +31,7 @@ from collections import namedtuple
 from typing import Any, Dict, Optional
 
 from cachetools import TTLCache
+import redis
 
 from streamlit import config
 from streamlit import file_util
@@ -111,6 +112,40 @@ class _MemCaches(object):
 
 # Our singleton _MemCaches instance
 _mem_caches = _MemCaches()
+
+
+class _RedisCache:
+    """Manages a cache backed by Redis."""
+
+    client: redis.Redis
+
+    def __init__(self, key_prefix: str, connection_url: str) -> None:
+        _LOGGER.debug(
+            f"Connecting to Redis using key prefix: {key_prefix}, "
+            f"connection URL: '{connection_url}'"
+        )
+        self.client = redis.Redis.from_url(url=connection_url)
+        self.key_prefix = key_prefix
+
+    def get(self, key: str) -> Optional[bytes]:
+        return self.client.get(f"{self.key_prefix}{key}")
+
+    def set(self, key: str, value: str) -> Any:
+        return self.client.set(
+            name=f"{self.key_prefix}{key}",
+            value=value,
+            ex=10 * 60,  # Expires in 10 minutes.
+        )
+
+
+_redis_cache = (
+    _RedisCache(
+        key_prefix=config.get_option("client.externalCacheKeyPrefix"),
+        connection_url=config.get_option("client.externalCacheRedisURL"),
+    )
+    if config.get_option("client.enableExternalCache")
+    else None
+)
 
 
 # A thread-local counter that's incremented when we enter @st.cache
@@ -308,8 +343,39 @@ def _write_to_disk_cache(key, value):
         raise CacheError("Unable to write to cache: %s" % e)
 
 
+def _write_to_redis_cache(key: str, value: Any) -> None:
+    if _redis_cache is None:
+        _LOGGER.warn("Redis cache is not enabled.")
+        return None
+    _LOGGER.debug(f"Adding to redis cache, key: {key}")
+    entry = _DiskCacheEntry(value=value)
+    b = pickle.dumps(entry, pickle.HIGHEST_PROTOCOL)
+    _redis_cache.set(key=key, value=b)
+    _LOGGER.debug(f"Added to redis cache, key: {key}")
+
+
+def _read_from_redis_cache(key: str) -> Any:
+    if _redis_cache is None:
+        _LOGGER.warn("Redis cache is not enabled.")
+        return None
+    _LOGGER.debug(f"Reading from redis cache, key: {key}")
+    b = _redis_cache.get(key)
+    if b is None:
+        raise CacheKeyNotFoundError("Key not found in Redis cache")
+    entry = pickle.loads(b)
+    value = entry.value
+    _LOGGER.debug(f"Redis cache HIT: key: {key}, value type: {type(value)}")
+    return value
+
+
 def _read_from_cache(
-    mem_cache, key, persist, allow_output_mutation, func_or_code, hash_funcs=None
+    mem_cache,
+    key,
+    persist,
+    persistx,
+    allow_output_mutation,
+    func_or_code,
+    hash_funcs=None,
 ):
     """Read a value from the cache.
 
@@ -333,22 +399,40 @@ def _read_from_cache(
                 mem_cache, key, value, allow_output_mutation, func_or_code, hash_funcs
             )
             return value
+
+        if persistx:
+            value = _read_from_redis_cache(key)
+            _write_to_mem_cache(
+                mem_cache, key, value, allow_output_mutation, func_or_code, hash_funcs
+            )
+            return value
+
         raise e
 
 
 def _write_to_cache(
-    mem_cache, key, value, persist, allow_output_mutation, func_or_code, hash_funcs=None
+    mem_cache,
+    key,
+    value,
+    persist,
+    persistx,
+    allow_output_mutation,
+    func_or_code,
+    hash_funcs=None,
 ):
     _write_to_mem_cache(
         mem_cache, key, value, allow_output_mutation, func_or_code, hash_funcs
     )
     if persist:
         _write_to_disk_cache(key, value)
+    if persistx:
+        _write_to_redis_cache(key, value)
 
 
 def cache(
     func=None,
     persist=False,
+    persistx=False,
     allow_output_mutation=False,
     show_spinner=True,
     suppress_st_warning=False,
@@ -452,6 +536,7 @@ def cache(
         return lambda f: cache(
             func=f,
             persist=persist,
+            persistx=persistx,
             allow_output_mutation=allow_output_mutation,
             show_spinner=show_spinner,
             suppress_st_warning=suppress_st_warning,
@@ -558,6 +643,7 @@ def cache(
                     mem_cache=mem_cache,
                     key=value_key,
                     persist=persist,
+                    persistx=persistx,
                     allow_output_mutation=allow_output_mutation,
                     func_or_code=func,
                     hash_funcs=hash_funcs,
@@ -579,6 +665,7 @@ def cache(
                     key=value_key,
                     value=return_value,
                     persist=persist,
+                    persistx=persistx,
                     allow_output_mutation=allow_output_mutation,
                     func_or_code=func,
                     hash_funcs=hash_funcs,
