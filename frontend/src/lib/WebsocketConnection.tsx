@@ -50,8 +50,8 @@ const PING_RETRY_PERIOD_MS = 500
  * Timeout when attempting to connect to a websocket, in millis.
  * This should be <= bootstrap.py#BROWSER_WAIT_TIMEOUT_SEC.
  */
-// XXX: Increase timeout to 15 seconds (ch1820)
-const WEBSOCKET_TIMEOUT_MS = 15 * 1000
+// XXX: Increase timeout to 5 seconds (ch1820)
+const WEBSOCKET_TIMEOUT_MS = 5 * 1000
 
 /**
  * If the ping retrieves a 403 status code a message will be displayed.
