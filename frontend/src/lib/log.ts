@@ -23,9 +23,10 @@ import { IS_DEV_ENV } from "./baseconsts"
  * Log a message to the console, but only if in dev mode.
  */
 export function logMessage(...args: any[]): void {
-  if (IS_DEV_ENV) {
-    console.log(...args)
-  }
+  // if (IS_DEV_ENV) {
+  //   console.log(...args)
+  // }
+  console.log(...args)
 }
 
 /**
@@ -34,9 +35,10 @@ export function logMessage(...args: any[]): void {
  * user experience, if any.
  */
 export function logWarning(...args: any[]): void {
-  if (IS_DEV_ENV) {
-    console.warn(...args)
-  }
+  // if (IS_DEV_ENV) {
+  //   console.warn(...args)
+  // }
+  console.warn(...args)
 }
 
 /**
