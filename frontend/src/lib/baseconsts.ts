@@ -33,7 +33,8 @@ export const WEBSOCKET_PORT_DEV = 8501
 /**
  * True when in development mode.
  */
-export const IS_DEV_ENV = +window.location.port === WWW_PORT_DEV
+// XXX: Unconditionally enable dev mode for debug logging in the FE code.
+export const IS_DEV_ENV = true // +window.location.port === WWW_PORT_DEV
 
 /**
  * True when viewing a shared report.
